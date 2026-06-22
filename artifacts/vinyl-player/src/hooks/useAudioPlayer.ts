@@ -5,10 +5,14 @@ export function useAudioPlayer() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(30);
+  const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(0.8);
   const [isLoading, setIsLoading] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [playbackRate, setPlaybackRateState] = useState(1);
   const onEndedCallbackRef = useRef<(() => void) | null>(null);
+  const fadeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const savedVolumeRef = useRef(0.8);
 
   useEffect(() => {
     const audio = new Audio();
@@ -64,17 +68,17 @@ export function useAudioPlayer() {
     setIsLoading(true);
     setProgress(0);
     setCurrentTime(0);
+    setDuration(0);
     audio.pause();
     audio.src = url;
+    audio.playbackRate = playbackRate;
     audio.load();
     audio.addEventListener(
       "canplay",
-      () => {
-        audio.play().catch(() => setIsLoading(false));
-      },
+      () => { audio.play().catch(() => setIsLoading(false)); },
       { once: true }
     );
-  }, []);
+  }, [playbackRate]);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
@@ -92,29 +96,85 @@ export function useAudioPlayer() {
     audio.currentTime = (pct / 100) * audio.duration;
   }, []);
 
+  const seekBy = useCallback((seconds: number) => {
+    const audio = audioRef.current;
+    if (!audio || isNaN(audio.duration)) return;
+    audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + seconds));
+  }, []);
+
   const changeVolume = useCallback((v: number) => {
     const audio = audioRef.current;
     if (!audio) return;
     const clamped = Math.min(1, Math.max(0, v));
     audio.volume = clamped;
+    audio.muted = false;
     setVolume(clamped);
+    setIsMuted(false);
+    savedVolumeRef.current = clamped;
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (fadeIntervalRef.current) {
+      clearInterval(fadeIntervalRef.current);
+      fadeIntervalRef.current = null;
+    }
+
+    if (isMuted) {
+      const target = savedVolumeRef.current || 0.8;
+      let v = 0;
+      audio.muted = false;
+      audio.volume = 0;
+      fadeIntervalRef.current = setInterval(() => {
+        v = Math.min(target, v + target / 20);
+        audio.volume = v;
+        if (v >= target) {
+          clearInterval(fadeIntervalRef.current!);
+          fadeIntervalRef.current = null;
+        }
+      }, 15);
+      setIsMuted(false);
+      setVolume(target);
+    } else {
+      savedVolumeRef.current = audio.volume;
+      let v = audio.volume;
+      fadeIntervalRef.current = setInterval(() => {
+        v = Math.max(0, v - audio.volume / 20);
+        audio.volume = v;
+        if (v <= 0) {
+          audio.muted = true;
+          clearInterval(fadeIntervalRef.current!);
+          fadeIntervalRef.current = null;
+        }
+      }, 15);
+      setIsMuted(true);
+    }
+  }, [isMuted]);
+
+  const setPlaybackRate = useCallback((rate: number) => {
+    const audio = audioRef.current;
+    if (audio) audio.playbackRate = rate;
+    setPlaybackRateState(rate);
   }, []);
 
   const setOnEnded = useCallback((fn: () => void) => {
     onEndedCallbackRef.current = fn;
   }, []);
 
+  const forceStop = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
+    setIsPlaying(false);
+  }, []);
+
   return {
-    isPlaying,
-    progress,
-    currentTime,
-    duration,
-    volume,
-    isLoading,
-    loadAndPlay,
-    togglePlay,
-    seek,
-    changeVolume,
-    setOnEnded,
+    isPlaying, progress, currentTime, duration, volume,
+    isLoading, isMuted, playbackRate,
+    loadAndPlay, togglePlay, seek, seekBy, changeVolume,
+    toggleMute, setPlaybackRate, setOnEnded, forceStop,
+    audioRef,
   };
 }
