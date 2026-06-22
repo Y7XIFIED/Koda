@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Vinyl Player"
+version = "1.0.0"
+id = "artifacts/vinyl-player"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19759
+
+[services.development]
+run = "pnpm --filter @workspace/vinyl-player run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/vinyl-player", "run", "build" ]
+publicDir = "artifacts/vinyl-player/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19759"
+BASE_PATH = "/"
