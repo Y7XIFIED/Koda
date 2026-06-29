@@ -353,7 +353,7 @@ export default function App() {
     if (currentTrack) {
       document.title = `${isPlaying ? "▶" : "❚❚"} ${currentTrack.trackName} - ${currentTrack.artistName}`;
     } else {
-      document.title = "Coda Player";
+      document.title = "Koda Player";
     }
   }, [currentTrack, isPlaying]);
 
@@ -599,7 +599,7 @@ export default function App() {
             </div>
             <div className="flex flex-col items-start hidden sm:flex">
               <span className="font-serif text-2xl tracking-[0.3em] uppercase transition-all duration-1000 animate-pulse leading-none"
-                style={{ color: `rgba(${c},.9)` }}>Coda</span>
+                style={{ color: `rgba(${c},.9)` }}>Koda</span>
               <span className="text-[9px] tracking-[0.2em] uppercase opacity-50 font-semibold mt-1" style={{ color: `rgba(${c},.8)` }}>
                 by Y7XIFIED © All Rights Reserved
               </span>
