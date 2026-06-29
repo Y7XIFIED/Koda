@@ -1,9 +1,9 @@
-import { useRef, useState, useMemo, useCallback } from "react";
+import { useRef, useState, useMemo, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Upload } from "lucide-react";
 import type { iTunesTrack } from "../lib/itunes";
 
-export type TurntableFinish = "walnut" | "black" | "aluminum";
+
 
 /* ── Genre → vinyl tint ─────────────────────────────────────────── */
 const GENRE_TINTS: Record<string, string> = {
@@ -26,23 +26,6 @@ const GENRE_TINTS: Record<string, string> = {
   folk:         "rgba(140,110,60,0.15)",
 };
 
-const FINISH_STYLES: Record<TurntableFinish, React.CSSProperties> = {
-  walnut: {
-    background: "linear-gradient(135deg,#3d2a1a 0%,#5c3d24 30%,#3a2516 60%,#4a3020 100%)",
-    borderColor: "rgba(255,200,100,.08)",
-    boxShadow: "0 20px 60px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,200,100,.05)",
-  },
-  black: {
-    background: "linear-gradient(145deg,#111 0%,#1c1c1c 40%,#0a0a0a 70%,#141414 100%)",
-    borderColor: "rgba(255,255,255,.06)",
-    boxShadow: "0 20px 60px rgba(0,0,0,.95),inset 0 1px 0 rgba(255,255,255,.04)",
-  },
-  aluminum: {
-    background: "linear-gradient(145deg,#9a9a9a 0%,#c0c0c0 25%,#888 50%,#b8b8b8 75%,#909090 100%)",
-    borderColor: "rgba(255,255,255,.25)",
-    boxShadow: "0 20px 60px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.4)",
-  },
-};
 
 /* ── Static particles ────────────────────────────────────────────── */
 const PARTICLES = Array.from({ length: 22 }, (_, i) => ({
@@ -62,24 +45,25 @@ export interface TurntableProps {
   isLoading:       boolean;
   isFindingStream: boolean;
   accentColor:     string;
-  finish:          TurntableFinish;
+
   showParticles?:  boolean;
   customLabel?:    string | null;
   djName?:         string;
   onCustomLabel?:  (url: string) => void;
   onScratch?:      (rate: number) => void;
+  onSeek?:         (pct: number) => void;
+  togglePlay?:     () => void;
 }
 
 export default function Turntable({
   isPlaying, progress, currentTrack, isLoading, isFindingStream,
-  accentColor: c, finish, showParticles = true, customLabel, djName,
-  onCustomLabel, onScratch,
+  accentColor: c, showParticles = true, customLabel, djName,
+  onCustomLabel, onScratch, onSeek, togglePlay,
 }: TurntableProps) {
   const containerRef   = useRef<HTMLDivElement>(null);
   const labelInputRef  = useRef<HTMLInputElement>(null);
   const scratchStartX  = useRef<number | null>(null);
   const [tilt, setTilt]  = useState({ x: 0, y: 0 });
-  const finishStyle = FINISH_STYLES[finish];
   const busy = isLoading || isFindingStream;
 
   /* Vinyl tint from genre */
@@ -94,22 +78,28 @@ export default function Turntable({
   /* Parallax tilt */
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!containerRef.current) return;
-    const r = containerRef.current.getBoundingClientRect();
-    setTilt({
-      x: ((e.clientY - r.top - r.height / 2) / (r.height / 2)) * 7,
-      y: -((e.clientX - r.left - r.width / 2) / (r.width / 2)) * 7,
-    });
-  }, []);
+    if (!isPlaying) {
+      setTilt({ x: 0, y: 0 });
+      return;
+    }
+    const { left, top, width, height } = containerRef.current.getBoundingClientRect();
+    const x = (e.clientX - left) / width - 0.5;
+    const y = (e.clientY - top) / height - 0.5;
+    setTilt({ x: -y * 20, y: x * 20 });
+  }, [isPlaying]);
 
-  /* DJ scratch */
+  /* Manual scratch (skip 1s forward/back) */
   const handleScratchStart = (e: React.PointerEvent) => {
-    scratchStartX.current = e.clientX;
     e.currentTarget.setPointerCapture(e.pointerId);
+    scratchStartX.current = e.clientX;
   };
   const handleScratchMove = (e: React.PointerEvent) => {
-    if (scratchStartX.current === null || !onScratch) return;
-    const dx = e.clientX - scratchStartX.current;
-    onScratch(Math.min(2, Math.max(0.25, 1 + dx / 80)));
+    if (scratchStartX.current === null) return;
+    const delta = e.clientX - scratchStartX.current;
+    if (Math.abs(delta) > 20) {
+      onScratch?.(delta > 0 ? 1 : -1);
+      scratchStartX.current = e.clientX;
+    }
   };
   const handleScratchEnd = (e: React.PointerEvent) => {
     scratchStartX.current = null;
@@ -126,6 +116,56 @@ export default function Turntable({
     reader.readAsDataURL(file);
   };
 
+  /* Mechanical CD Eject Sound */
+  const playMechanicalSound = useCallback((isGoingIn: boolean) => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "square";
+      if (isGoingIn) {
+        osc.frequency.setValueAtTime(150, ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(300, ctx.currentTime + 0.3);
+      } else {
+        osc.frequency.setValueAtTime(300, ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(150, ctx.currentTime + 0.4);
+      }
+      gain.gain.setValueAtTime(0.04, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+      
+      const bufferSize = ctx.sampleRate * 0.4;
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+      const noiseSource = ctx.createBufferSource();
+      noiseSource.buffer = buffer;
+      const noiseFilter = ctx.createBiquadFilter();
+      noiseFilter.type = "lowpass";
+      noiseFilter.frequency.value = 800;
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.03, ctx.currentTime);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      noiseSource.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      noiseSource.start();
+    } catch {}
+  }, []);
+
+  const [prevIsPlaying, setPrevIsPlaying] = useState(isPlaying);
+  
+  useEffect(() => {
+    if (isPlaying !== prevIsPlaying) {
+      playMechanicalSound(isPlaying);
+      setPrevIsPlaying(isPlaying);
+      if (!isPlaying) setTilt({ x: 0, y: 0 }); // snap back to 0 when paused
+    }
+  }, [isPlaying, prevIsPlaying, playMechanicalSound]);
+
   return (
     <div ref={containerRef} className="relative select-none" style={{ perspective: "1200px" }}
       onMouseMove={handleMouseMove} onMouseLeave={() => setTilt({ x: 0, y: 0 })}>
@@ -133,32 +173,46 @@ export default function Turntable({
       <motion.div
         animate={{ rotateX: tilt.x, rotateY: tilt.y }}
         transition={{ type: "spring", stiffness: 120, damping: 18 }}
-        className="relative w-[290px] h-[290px] md:w-[440px] md:h-[440px] rounded-xl border"
-        style={{ ...finishStyle, transformStyle: "preserve-3d" }}>
+        className="relative w-[290px] h-[290px] md:w-[440px] md:h-[440px]"
+        style={{ transformStyle: "preserve-3d" }}>
 
-        {/* Ambient inset glow */}
-        <div className="absolute inset-0 rounded-xl pointer-events-none"
-          style={{ boxShadow: `inset 0 0 50px rgba(${c},.05)` }} />
+        {/* Platter with Strobe Dots (Spins, stays in place) */}
+        <div className="absolute top-1/2 left-[45%] -translate-x-1/2 -translate-y-1/2 w-[270px] h-[270px] md:w-[420px] md:h-[420px] rounded-full strobe-platter flex items-center justify-center spin-record" style={{ animationPlayState: isPlaying ? "running" : "paused" }}>
+          <div className="w-[250px] h-[250px] md:w-[390px] md:h-[390px] rounded-full strobe-platter-inner relative flex items-center justify-center" />
+        </div>
 
-        {/* Platter */}
-        <div className="absolute top-1/2 left-[45%] -translate-x-1/2 -translate-y-1/2 w-[250px] h-[250px] md:w-[390px] md:h-[390px] rounded-full border"
-          style={{ background:"#0f0f0f", borderColor:"#252525", boxShadow:"0 10px 30px rgba(0,0,0,.9),inset 0 0 20px rgba(0,0,0,.6)" }}>
+        {/* Record Container - Slides independently, spins inside */}
+        <motion.div
+          className="absolute top-1/2 left-[45%] -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
+          animate={{ 
+            scale: isPlaying ? 1 : 0.85, 
+            x: isPlaying ? 0 : -140,
+            y: isPlaying ? 0 : 140 
+          }}
+          transition={{ type: "spring", stiffness: 100, damping: 16 }}>
+          
+          <div className="flex items-center justify-center spin-record" style={{ animationPlayState: isPlaying ? "running" : "paused" }}>
+            {/* Vinyl record — 3D flip on track change */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentTrack?.trackId ?? "empty"}
+                initial={{ rotateY: -110, opacity: 0.15, scale: 0.88 }}
+                animate={{ rotateY: 0, opacity: 1, scale: 1 }}
+                exit={{ rotateY: 110, opacity: 0.15, scale: 0.88 }}
+                transition={{ type: "spring", stiffness: 120, damping: 18 }}
+                style={{ transformStyle: "preserve-3d", perspective: "800px" }}
+                className="w-[245px] h-[245px] md:w-[380px] md:h-[380px]">
 
-          {/* Vinyl record — 3D flip on track change */}
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentTrack?.trackId ?? "empty"}
-              initial={{ rotateY: -110, opacity: 0.15, scale: 0.88 }}
-              animate={{ rotateY: 0, opacity: 1, scale: 1 }}
-              exit={{ rotateY: 110, opacity: 0.15, scale: 0.88 }}
-              transition={{ type: "spring", stiffness: 160, damping: 22 }}
-              style={{ transformStyle: "preserve-3d", perspective: "800px" }}
-              className="w-full h-full">
+                <div className="w-full h-full rounded-full vinyl-grooves relative flex items-center justify-center">
 
-              <div className="w-full h-full rounded-full vinyl-grooves relative flex items-center justify-center spin-record"
-                style={{ animationPlayState: isPlaying ? "running" : "paused" }}>
+                {/* Strobe Dots SVG */}
+                <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="-150 -150 300 300">
+                  {Array.from({ length: 72 }).map((_, i) => (
+                    <rect key={`strobe-${i}`} x="-1.5" y="-149" width="3" height="6" fill="rgba(255,255,255,0.12)" transform={`rotate(${i * 5})`} />
+                  ))}
+                </svg>
 
-                {/* Genre tint overlay */}
+                {/* The grooved vinyl lines */}
                 {genreTint && (
                   <div className="absolute inset-0 rounded-full pointer-events-none transition-all duration-1000"
                     style={{ background: genreTint, mixBlendMode: "overlay" }} />
@@ -166,29 +220,14 @@ export default function Turntable({
 
                 <div className="absolute inset-0 rounded-full vinyl-highlight pointer-events-none mix-blend-screen" />
 
-                {/* Particles — sit above grooves, don't spin */}
-                {showParticles && isPlaying && (
-                  <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ animation: "counter-spin 4s linear infinite" }}>
-                    {PARTICLES.map(p => (
-                      <circle key={p.id}
-                        cx={`${p.cx}%`} cy={`${p.cy}%`} r={p.r}
-                        fill={`rgba(255,255,255,${0.2 + Math.random() * 0.4})`}>
-                        <animate attributeName="cx" values={`${p.cx}%;${p.cx + p.ox}%;${p.cx}%`} dur={`${p.dur}s`} begin={`${p.delay}s`} repeatCount="indefinite" />
-                        <animate attributeName="cy" values={`${p.cy}%;${p.cy + p.oy}%;${p.cy}%`} dur={`${p.dur}s`} begin={`${p.delay}s`} repeatCount="indefinite" />
-                        <animate attributeName="opacity" values="0.1;0.6;0.1" dur={`${p.dur}s`} begin={`${p.delay}s`} repeatCount="indefinite" />
-                      </circle>
-                    ))}
-                  </svg>
-                )}
-
                 {/* Album art label — with DJ scratch */}
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={`art-${customLabel ?? currentTrack?.trackId ?? "empty"}`}
                     initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
+                    animate={{ opacity: 1, scale: 1, rotateY: 0 }}
                     exit={{ opacity: 0, scale: 0.8 }}
-                    transition={{ duration: 0.3 }}
+                    transition={{ duration: 0.5 }}
                     className="w-[90px] h-[90px] md:w-[125px] md:h-[125px] rounded-full overflow-hidden relative cursor-pointer group"
                     style={{ boxShadow:`inset 0 0 10px rgba(0,0,0,.6),0 0 25px rgba(${c},.25)`, background:"#222", border:`2px solid rgba(${c},.35)` }}
                     onPointerDown={handleScratchStart}
@@ -215,9 +254,15 @@ export default function Turntable({
                     )}
                     <input ref={labelInputRef} type="file" accept="image/*" className="hidden" onChange={handleLabelUpload} />
 
-                    {/* Spindle hole */}
+
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 md:w-4 md:h-4 rounded-full z-10 pointer-events-none"
-                      style={{ background:"#1a1a1a", border:"1px solid rgba(0,0,0,.6)", boxShadow:"inset 0 0 4px rgba(0,0,0,.9)" }} />
+                      style={{
+                        background: "rgba(255,255,255,0.02)",
+                        backdropFilter: "blur(20px)",
+                        borderColor: "rgba(255,255,255,0.1)",
+                        boxShadow: "0 30px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15), inset 0 0 20px rgba(255,255,255,0.02)",
+                        borderWidth: "1px"
+                      }} />
                   </motion.div>
                 </AnimatePresence>
 
@@ -236,10 +281,11 @@ export default function Turntable({
               </div>
             </motion.div>
           </AnimatePresence>
-        </div>
+          </div>
+        </motion.div>
 
         {/* Tonearm */}
-        <Tonearm isPlaying={isPlaying} progress={progress} accentColor={c} />
+        <Tonearm isPlaying={isPlaying} progress={progress} accentColor={c} onSeek={onSeek} togglePlay={togglePlay} />
 
         {/* DJ name on plinth */}
         {djName && (
@@ -253,26 +299,86 @@ export default function Turntable({
   );
 }
 
-/* ── Tonearm ─────────────────────────────────────────────────────── */
-function Tonearm({ isPlaying, progress, accentColor: c }: { isPlaying: boolean; progress: number; accentColor: string }) {
-  const rotation = isPlaying ? 28 + progress * 0.15 : 3;
+/* ── Tonearm (Skeuomorphic) ──────────────────────────────────────── */
+function Tonearm({ isPlaying, progress, accentColor: c, onSeek, togglePlay }: { isPlaying: boolean; progress: number; accentColor: string; onSeek?: (p:number)=>void; togglePlay?: ()=>void; }) {
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragRot, setDragRot] = useState(0);
+
+  // Realistic easing for arm drop and lift
+  const baseRotation = isPlaying ? 28 + progress * 0.15 : 0;
+  const rotation = isDragging ? dragRot : baseRotation;
+
   return (
-    <div className="absolute top-6 right-6 md:top-10 md:right-10 w-20 h-56 md:w-28 md:h-72 pointer-events-none z-10">
+    <div className="absolute top-6 right-6 md:top-10 md:right-10 w-24 h-64 md:w-32 md:h-80 z-10" style={{ filter: "drop-shadow(15px 25px 25px rgba(0,0,0,0.6))" }}>
       <motion.div
         animate={{ rotate: rotation }}
-        transition={{ type: "spring", stiffness: 35, damping: 14 }}
-        className="relative w-full h-full"
-        style={{ transformOrigin: "80% 15%" }}>
-        <div className="absolute top-0 right-0 w-14 h-14 md:w-18 md:h-18 rounded-full border-4 flex items-center justify-center"
-          style={{ background:"linear-gradient(135deg,#505050,#111)", borderColor:"#1a1a1a", boxShadow:"0 4px 14px rgba(0,0,0,.9)", width:52, height:52 }}>
-          <div className="rounded-full border" style={{ width:34, height:34, background:"#191919", borderColor:"rgba(0,0,0,.4)", boxShadow:"inset 0 2px 6px rgba(0,0,0,.9)" }} />
+        transition={{ type: "spring", stiffness: 40, damping: 18 }}
+        className={`relative w-full h-full ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}
+        style={{ transformOrigin: "75% 15%" }}
+        onPanStart={() => {
+          setIsDragging(true);
+          setDragRot(rotation);
+        }}
+        onPan={(e, info) => {
+          // Adjust rotation based on drag delta X
+          let newRot = dragRot + info.delta.x * 0.3;
+          newRot = Math.max(0, Math.min(newRot, 43)); // 0=rest, 28=start, 43=end
+          setDragRot(newRot);
+        }}
+        onPanEnd={() => {
+          setIsDragging(false);
+          if (dragRot < 15) {
+            // Dragged off record -> Stop/Pause
+            if (isPlaying) togglePlay?.();
+          } else {
+            // Dragged onto record -> Seek
+            let pct = ((dragRot - 28) / 15) * 100;
+            pct = Math.max(0, Math.min(pct, 100));
+            onSeek?.(pct);
+            if (!isPlaying) togglePlay?.();
+          }
+        }}
+        onTap={() => {
+          if (isPlaying) {
+            togglePlay?.();
+          } else {
+            onSeek?.(0);
+            togglePlay?.();
+          }
+        }}>
+        
+        {/* Counterweight */}
+        <div className="absolute -top-4 right-2 md:-top-6 md:right-4 w-12 h-8 md:w-16 md:h-10 rounded-sm pointer-events-none"
+          style={{ background: "linear-gradient(to bottom, #d0d0d0, #555, #d0d0d0)", border: "1px solid #333", boxShadow: "inset 0 0 5px rgba(0,0,0,0.8)" }} />
+
+        {/* Pivot Base */}
+        <div className="absolute top-0 right-0 w-16 h-16 md:w-20 md:h-20 rounded-full border-[6px] pointer-events-none"
+          style={{ background:"radial-gradient(circle at center, #111, #333)", borderColor:"#222", boxShadow:"inset 0 4px 10px rgba(0,0,0,.9), 0 4px 10px rgba(0,0,0,.8)" }}>
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full"
+            style={{ background: "linear-gradient(135deg, #eee, #888)", boxShadow: "0 2px 5px rgba(0,0,0,0.8)" }} />
         </div>
-        <div className="absolute top-7 right-7 w-2 rounded-full"
-          style={{ height:192, background:"linear-gradient(to right,#e8e8e8,#909090,#e8e8e8)", transform:"rotate(-20deg)", transformOrigin:"top center", boxShadow:"2px 6px 10px rgba(0,0,0,.6)", border:"1px solid rgba(255,255,255,.2)" }} />
-        <div className="absolute bottom-6 left-4 md:bottom-4 md:left-6 w-5 h-10 md:w-7 md:h-14 rounded-sm"
-          style={{ background:"#111", transform:"rotate(10deg)", boxShadow:"0 6px 16px rgba(0,0,0,.7)", border:"1px solid #333" }}>
-          <div className="absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full transition-all duration-1000"
-            style={{ background:`rgb(${c})`, boxShadow:`0 0 6px rgb(${c})` }} />
+
+        {/* Tubular S-Arm */}
+        <svg className="absolute top-8 right-6 w-16 h-48 md:w-20 md:h-64 overflow-visible pointer-events-none" viewBox="0 0 100 300" preserveAspectRatio="none">
+          <path d="M 80 0 C 80 150, 20 150, 20 300" fill="none" stroke="url(#chrome)" strokeWidth="12" strokeLinecap="round" />
+          <defs>
+            <linearGradient id="chrome" x1="0" y1="0" x2={Math.max(0.5, 1 - dragRot/100)} y2={dragRot/50}>
+              <stop offset="0%" stopColor="#777" />
+              <stop offset={`${30 + dragRot/2}%`} stopColor="#fff" />
+              <stop offset={`${60 + dragRot/2}%`} stopColor="#fff" />
+              <stop offset="100%" stopColor="#333" />
+            </linearGradient>
+          </defs>
+        </svg>
+
+        {/* Headshell & Stylus */}
+        <div className="absolute bottom-2 left-1 md:-bottom-2 md:left-2 w-8 h-14 md:w-10 md:h-16 rounded-sm pointer-events-none"
+          style={{ background:"linear-gradient(145deg, #222, #000)", transform:"rotate(15deg)", boxShadow:"0 6px 16px rgba(0,0,0,.9)", border:"1px solid #444", borderTop: "3px solid silver" }}>
+          
+          <div className="absolute bottom-2 right-1 w-2 h-2 rounded-full transition-all duration-1000"
+            style={{ background:`rgb(${c})`, boxShadow:`0 0 8px 2px rgb(${c})` }} />
+            
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 w-1 h-6" style={{ background: "linear-gradient(to right, #aaa, #eee, #aaa)" }} />
         </div>
       </motion.div>
     </div>

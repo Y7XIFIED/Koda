@@ -6,17 +6,19 @@ export function useAudioPlayer() {
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(0.8);
+  const [volume, setVolume] = useState(() => {
+    try { return parseFloat(localStorage.getItem("vinyl-volume") ?? "0.8"); } catch { return 0.8; }
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [playbackRate, setPlaybackRateState] = useState(1);
   const onEndedCallbackRef = useRef<(() => void) | null>(null);
   const fadeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const savedVolumeRef = useRef(0.8);
+  const savedVolumeRef = useRef(volume);
 
   useEffect(() => {
     const audio = new Audio();
-    audio.volume = 0.8;
+    audio.volume = volume;
     audioRef.current = audio;
 
     const handleTimeUpdate = () => {
@@ -103,14 +105,15 @@ export function useAudioPlayer() {
   }, []);
 
   const changeVolume = useCallback((v: number) => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const clamped = Math.min(1, Math.max(0, v));
-    audio.volume = clamped;
-    audio.muted = false;
-    setVolume(clamped);
-    setIsMuted(false);
-    savedVolumeRef.current = clamped;
+    if (audioRef.current) {
+      const clamped = Math.min(1, Math.max(0, v));
+      audioRef.current.volume = clamped;
+      audioRef.current.muted = false;
+      setVolume(clamped);
+      setIsMuted(false);
+      savedVolumeRef.current = clamped;
+      try { localStorage.setItem("vinyl-volume", clamped.toString()); } catch {}
+    }
   }, []);
 
   const toggleMute = useCallback(() => {

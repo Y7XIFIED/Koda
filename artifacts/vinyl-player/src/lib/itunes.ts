@@ -9,6 +9,7 @@ export type iTunesTrack = {
   genre?: string;
   releaseYear?: string;
   artistId?: number;
+  trackViewUrl?: string;
 };
 
 export async function searchMusic(term: string, limit = 30): Promise<iTunesTrack[]> {
@@ -28,16 +29,19 @@ export async function getArtistTracks(artistId: number): Promise<iTunesTrack[]> 
 }
 
 export async function getTopCharts(): Promise<iTunesTrack[]> {
-  const url = "https://itunes.apple.com/us/rss/topsongs/limit=25/json";
+  const url = "https://itunes.apple.com/us/rss/topsongs/limit=100/json";
   const res = await fetch(url);
   if (!res.ok) return [];
   const data = await res.json();
-  const ids: string[] = (data.feed?.entry ?? []).map((e: any) => e.id?.attributes?.["im:id"]).filter(Boolean);
+  let ids: string[] = (data.feed?.entry ?? []).map((e: any) => e.id?.attributes?.["im:id"]).filter(Boolean);
   if (!ids.length) return [];
+  
+  ids = ids.sort(() => 0.5 - Math.random()).slice(0, 25);
+  
   const lookup = await fetch(`https://itunes.apple.com/lookup?id=${ids.join(",")}`);
   if (!lookup.ok) return [];
   const lookupData = await lookup.json();
-  return mapResults(lookupData.results);
+  return mapResults(lookupData.results).sort(() => 0.5 - Math.random());
 }
 
 export async function getSuggestions(term: string): Promise<iTunesTrack[]> {
@@ -63,5 +67,6 @@ function mapResults(results: Record<string, unknown>[]): iTunesTrack[] {
       genre: (r.primaryGenreName as string) ?? undefined,
       releaseYear: r.releaseDate ? (r.releaseDate as string).slice(0, 4) : undefined,
       artistId: r.artistId as number | undefined,
+      trackViewUrl: r.trackViewUrl as string | undefined,
     }));
 }

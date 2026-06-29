@@ -78,30 +78,28 @@ async function getAudioFormat(videoId: string): Promise<CachedFormat> {
   const hit = fmtCache.get(videoId);
   if (hit && Date.now() < hit.expiresAt) return hit;
 
-  const info = await ytdl.getInfo(
-    `https://www.youtube.com/watch?v=${videoId}`,
-  );
+  try {
+    const r = await fetch(`https://pipedapi.smnz.de/streams/${videoId}`);
+    if (!r.ok) throw new Error("Piped API failed");
+    const data = await r.json();
+    
+    if (!data.audioStreams || data.audioStreams.length === 0) {
+      throw new Error("No audio streams found");
+    }
 
-  /* Prefer mp4 audio — its moov atom is at the start so the browser
-     can determine duration and seek immediately */
-  const audioFormats = info.formats.filter((f) => f.hasAudio && !f.hasVideo);
-  const fmt =
-    audioFormats.find((f) => f.container === "mp4") ??
-    ytdl.chooseFormat(info.formats, {
-      filter: "audioonly",
-      quality: "highestaudio",
-    });
+    const fmt = data.audioStreams.find((s: any) => s.mimeType.includes("mp4")) || data.audioStreams[0];
 
-  if (!fmt) throw new Error("No audio-only format found");
-
-  const result: CachedFormat = {
-    url: fmt.url,
-    mimeType: (fmt.mimeType ?? "audio/webm").split(";")[0],
-    contentLength: fmt.contentLength ?? null,
-    expiresAt: Date.now() + 90 * 60 * 1000,
-  };
-  fmtCache.set(videoId, result);
-  return result;
+    const result: CachedFormat = {
+      url: fmt.url,
+      mimeType: (fmt.mimeType ?? "audio/webm").split(";")[0],
+      contentLength: fmt.contentLength ? String(fmt.contentLength) : null,
+      expiresAt: Date.now() + 90 * 60 * 1000,
+    };
+    fmtCache.set(videoId, result);
+    return result;
+  } catch (err) {
+    throw new Error("Failed to get audio format from Piped API");
+  }
 }
 
 /* ── GET /api/songs/find?q=artist+title ─────────────────────────── */
