@@ -1,5 +1,8 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "artifacts/vinyl-player/dist",
-  "installCommand": "npm install --legacy-peer-deps"
+  "outputDirectory": "artifacts/vinyl-player/dist/public",
+  "installCommand": "npm install --legacy-peer-deps",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
