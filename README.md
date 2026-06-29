@@ -6,7 +6,7 @@
   </a>
 </div>
 
-Welcome to **Vinyl Tracker**! This isn't just a music player—it's a digital homage to the analog era. Get ready to experience your favorite tracks on a stunning 3D turntable that actually ejects records, spins beautifully, and sounds mechanically satisfying. Say goodbye to boring interfaces and hello to dynamic, glassmorphic perfection! 🎶✨
+Welcome to **Koda**! This isn't just a music player—it's a digital homage to the analog era. Get ready to experience your favorite tracks on a stunning 3D turntable that actually ejects records, spins beautifully, and sounds mechanically satisfying. Say goodbye to boring interfaces and hello to dynamic, glassmorphic perfection! 🎶✨
 
 ## 🚀 Live Website
 Experience the fully interactive website live here: https://kodaa-musicplayer.vercel.app
@@ -39,8 +39,8 @@ Experience the fully interactive website live here: https://kodaa-musicplayer.ve
 ```text
 📦 Vinyl-Tracker
  ┣ 📂 artifacts
- ┃ ┣ 📂 api-server        # Express backend for streaming music
- ┃ ┗ 📂 vinyl-player      # React frontend application
+ ┃ ┣ 📂 api-server
+ ┃ ┗ 📂 vinyl-player
  ┣ 📜 package.json
  ┗ 📜 pnpm-workspace.yaml
 ```
