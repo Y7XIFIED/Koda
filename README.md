@@ -9,7 +9,7 @@
 Welcome to **Vinyl Tracker**! This isn't just a music player—it's a digital homage to the analog era. Get ready to experience your favorite tracks on a stunning 3D turntable that actually ejects records, spins beautifully, and sounds mechanically satisfying. Say goodbye to boring interfaces and hello to dynamic, glassmorphic perfection! 🎶✨
 
 ## 🚀 Live Website
-Experience the fully interactive website live here: https://koda.vercel.app
+Experience the fully interactive website live here: https://kodaa-musicplayer.vercel.app
 
 ## 🎮 How to Control
 - **Play/Pause**: Click anywhere on the turntable to start or pause the track. Watch the mechanical tray smoothly slide the CD out when paused!
