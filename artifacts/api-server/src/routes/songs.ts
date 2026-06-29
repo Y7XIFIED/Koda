@@ -81,7 +81,7 @@ async function getAudioFormat(videoId: string): Promise<CachedFormat> {
   try {
     const r = await fetch(`https://pipedapi.smnz.de/streams/${videoId}`);
     if (!r.ok) throw new Error("Piped API failed");
-    const data = await r.json();
+    const data: any = await r.json();
     
     if (!data.audioStreams || data.audioStreams.length === 0) {
       throw new Error("No audio streams found");

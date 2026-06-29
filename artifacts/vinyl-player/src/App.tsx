@@ -1062,7 +1062,7 @@ function Tab({ active, onClick, icon, label, c }: { id: string; active: boolean;
 }
 
 /* ── Track card ───────────────────────────────────────────────────── */
-function TrackCard({ track, isActive, isPlaying, isFavorite, onToggleFavorite, onClick, c, isFocused }: { track: iTunesTrack; idx: number; isActive: boolean; isPlaying: boolean; isFavorite: boolean; onToggleFavorite: (e: React.MouseEvent) => void; onClick: () => void; c: string; isFocused?: boolean }) {
+function TrackCard({ track, idx, isActive, isPlaying, isFavorite, onToggleFavorite, onClick, c, isFocused }: { track: iTunesTrack; idx: number; isActive: boolean; isPlaying: boolean; isFavorite: boolean; onToggleFavorite: (e: React.MouseEvent) => void; onClick: () => void; c: string; isFocused?: boolean }) {
   const ref = useRef<HTMLButtonElement>(null);
   
   useEffect(() => {
